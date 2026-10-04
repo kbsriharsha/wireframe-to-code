@@ -1,0 +1,7 @@
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  workerd: set this to true or false
+overrides:
+  miniflare>sharp: 0.35.4
