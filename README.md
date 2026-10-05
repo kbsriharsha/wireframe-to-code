@@ -47,7 +47,7 @@ Restart the server after changing `.env.local`. You can also leave that file out
 
 1. Select a **Model** and **Design system** in the header.
 2. Draw on the canvas and edit the interface instructions below it. **Speak instructions** adds finalized speech recognition results to a separate, editable transcript.
-3. Leave **Auto** on to generate shortly after each change, or turn it off and use **Generate** to control API usage.
+3. Leave **Auto** on to generate after you pause, or turn it off and use **Generate** for an immediate request.
 4. View the result in **Preview** or inspect and edit it in **HTML**. **Export** downloads the current HTML prototype.
 
 **Clear canvas** removes the drawing, preview, and spoken instructions, and stops the microphone. Typed interface instructions remain so you can reuse them for a new sketch.
@@ -56,7 +56,7 @@ When **ServiceNow Lit (AIUX)** is selected, the **AIUX Lit** tab offers **Genera
 
 ## How generation works
 
-Each request generates a **complete HTML document** from the current sketch and instructions. The app does not apply incremental code edits. HTML streams into the **HTML** tab; **Preview** continues showing the last completed document until the new one finishes. Auto waits about 400 ms after a change before starting a request. Frequent edits can trigger repeated requests and reach your Gemini quota, so turn Auto off when you want to batch changes.
+Each request generates a **complete HTML document** from the current sketch and instructions. The app does not apply incremental code edits. HTML streams into the **HTML** tab, and **Preview** shows a visual draft as soon as usable page markup arrives. The final document replaces that draft with working interactions. Auto waits until a drawing gesture ends, then about 600 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. New edits cancel an active request and start a new one after the pause. Turn Auto off to control API usage.
 
 The design system choice guides the generated appearance. The standalone HTML preview does not install native ServiceNow, Material UI, shadcn/ui, or Apple components. The Lit draft is source code, not a UI Builder page or a deployed ServiceNow component.
 
