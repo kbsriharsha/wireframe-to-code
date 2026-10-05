@@ -57,7 +57,9 @@ When **ServiceNow Lit (AIUX)** is selected, the **AIUX Lit** tab offers **Genera
 
 ## How generation works
 
-Each request generates a **complete HTML document** from the current sketch and instructions. The app does not apply incremental code edits. HTML streams into the **HTML** tab, and **Preview** shows a visual draft as soon as usable page markup arrives. The final document replaces that draft with working interactions. Auto waits until a drawing gesture ends, then about 600 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. New edits cancel an active request and start a new one after the pause. Turn Auto off to control API usage.
+The first request generates a **complete HTML document** from the sketch and instructions. Later typed and spoken instruction edits ask the selected model for small replacements in the current HTML, so the preview updates without rewriting the whole page. These patch requests skip drawing image export and keep the existing preview visible until the edit succeeds. If the edit cannot identify one exact target, the current HTML stays intact; rephrase the instruction or click **Generate** for a full rebuild. Sketch and model or design system changes also rebuild the full page.
+
+During a full rebuild, HTML streams into the **HTML** tab and **Preview** shows a visual draft as soon as usable page markup arrives. Auto waits until a drawing gesture ends, then about 600 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. New edits cancel an active request and start a new one after the pause. Turn Auto off to control API usage.
 
 The design system choice guides the generated appearance. The standalone HTML preview does not install native ServiceNow, Material UI, shadcn/ui, or Apple components. The Lit draft is source code, not a UI Builder page or a deployed ServiceNow component.
 
@@ -69,6 +71,7 @@ The local server uses `GEMINI_API_KEY` or `OPENAI_API_KEY` from `.env.local` for
 | --- | --- |
 | `pnpm dev` | Run the development server at `127.0.0.1:3000`. |
 | `pnpm typecheck` | Check TypeScript types. |
+| `pnpm test:patch` | Check targeted HTML edits and safe failure behavior. |
 | `pnpm build` | Build the production app. |
 | `pnpm start` | Serve the production build at `127.0.0.1:3000`. |
 

@@ -24,19 +24,23 @@ export async function POST(request:Request) {
   const apiKey=(provider==='gemini'?process.env.GEMINI_API_KEY:process.env.OPENAI_API_KEY)?.trim()||(typeof key==='string'?key.trim():'');
   if(!apiKey)return Response.json({error:`Set ${LLM_PROVIDERS[provider].envKey} in .env.local or enter a key in LLM settings.`},{status:400});
   if(typeof model!=='string'||!validModel(provider,model))return Response.json({error:`Choose a supported ${LLM_PROVIDERS[provider].label} model.`},{status:400});
-  if(typeof image!=='string'||image.length>6000000||!Array.isArray(elements)||elements.length>3000)return Response.json({error:'Drawing is too large. Reduce it and try again.'},{status:400});
+  if(output==='patch'){
+   if(typeof input.html!=='string'||!input.html.trim()||input.html.length>200000||typeof input.previousInstructions!=='string'||typeof input.instructions!=='string'||input.previousInstructions.length>12000||input.instructions.length>12000)return Response.json({error:'Invalid page or instructions for a patch.'},{status:400});
+  }else if(typeof image!=='string'||image.length>6000000||!Array.isArray(elements)||elements.length>3000)return Response.json({error:'Drawing is too large. Reduce it and try again.'},{status:400});
   if(designSystem!==undefined&&!isDesignSystemId(designSystem))return Response.json({error:'Choose a supported design system.'},{status:400});
-  if(output!==undefined&&output!=='html'&&output!=='lit')return Response.json({error:'Choose a supported output format.'},{status:400});
+  if(output!==undefined&&output!=='html'&&output!=='lit'&&output!=='patch')return Response.json({error:'Choose a supported output format.'},{status:400});
   if(output==='lit'&&designSystem!=='servicenow_lit')return Response.json({error:'Lit source is available with ServiceNow Lit (AIUX).'}, {status:400});
   const selected=DESIGN_SYSTEMS[designSystem===undefined?'servicenow':designSystem];
 
-  const task=output==='lit'
+  const task=output==='patch'
+   ? `Edit the supplied HTML to reflect only the change between the previous and current instructions. Return only JSON in this exact shape: {"replacements":[{"old":"exact existing substring","replacement":"new substring"}]}. Use 1 to 8 small, non-overlapping replacements; each old string must occur exactly once in the HTML. Keep all unrelated HTML, CSS, and JavaScript byte-for-byte unchanged. Do not return a complete HTML document or markdown. If the instruction is broad, make the smallest targeted change possible. Previous instructions: ${input.previousInstructions}. Current instructions: ${input.instructions}. Current HTML:\n${input.html}`
+   : output==='lit'
    ? `Generate draft source for one ServiceNow Employee Slate AIUX widget matching the supplied Excalidraw sketch and instructions. Return JavaScript source only, no markdown. Import html and css from 'lit' and AIUXWidgetElement from '@servicenow/aiux-components-core'. Define one custom element with a unique tag name, reactive properties where needed, static styles using css, and a render method using Lit templates. Use sample data and local interactions only; leave clear comments where instance data, roles, or actions must be connected. Do not invent ServiceNow platform APIs, claim this source is deployable, or make network calls. Requirements: ${String(prompt).slice(0,12000)}. Elements: ${JSON.stringify(elements).slice(0,90000)}`
    : `Generate one complete HTML document with embedded CSS and vanilla JavaScript matching the supplied Excalidraw sketch and instructions. Return HTML only, no markdown. Selected design system: ${selected.label}. ${selected.guidance} Recreate its visual language in standalone HTML; do not claim to use its native components or packages. Use the drawing's layout and labels. Implement usable local interactions with clearly identified sample data. No network calls, external assets, external libraries, or credentials. Requirements: ${String(prompt).slice(0,12000)}. Elements: ${JSON.stringify(elements).slice(0,90000)}`;
   const geminiParts:any[]=[{text:task}];
-  if(image)geminiParts.push({inline_data:{mime_type:'image/png',data:image}});
+  if(output!=='patch'&&image)geminiParts.push({inline_data:{mime_type:'image/png',data:image}});
   const openaiContent:any[]=[{type:'input_text',text:task}];
-  if(image)openaiContent.push({type:'input_image',image_url:`data:image/png;base64,${image}`,detail:'auto'});
+  if(output!=='patch'&&image)openaiContent.push({type:'input_image',image_url:`data:image/png;base64,${image}`,detail:'auto'});
   const upstream=await fetch(provider==='gemini'
    ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
    : 'https://api.openai.com/v1/responses',{
@@ -46,8 +50,8 @@ export async function POST(request:Request) {
     : {'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
    signal:AbortSignal.any([request.signal,AbortSignal.timeout(90000)]),
    body:JSON.stringify(provider==='gemini'
-    ? {contents:[{parts:geminiParts}],generationConfig:{temperature:0.4,maxOutputTokens:16000}}
-    : {model,input:[{role:'user',content:openaiContent}],stream:true,store:false,max_output_tokens:16000,reasoning:{effort:'low'}}),
+    ? {contents:[{parts:geminiParts}],generationConfig:{temperature:output==='patch'?0:0.4,maxOutputTokens:output==='patch'?2500:16000}}
+    : {model,input:[{role:'user',content:openaiContent}],stream:true,store:false,max_output_tokens:output==='patch'?2500:16000,reasoning:{effort:'low'}}),
   });
   if(!upstream.ok){
    const body=await upstream.json().catch(()=>null);

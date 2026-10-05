@@ -8,6 +8,7 @@ out/
 dist/
 build/
 coverage/
+.playwright-mcp/
 .cache/
 .turbo/
 .vercel/
