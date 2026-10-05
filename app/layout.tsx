@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Wireframe Studio",
-  description: "Sketch interfaces and turn wireframes into design-system-inspired prototypes with Gemini.",
+  description: "Sketch interfaces and turn wireframes into design-system-inspired prototypes with Gemini or OpenAI.",
   other: {
     "codex-preview": "development",
   },
