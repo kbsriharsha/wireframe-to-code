@@ -7,33 +7,12 @@ import {Switch} from '@/components/ui/switch';
 import {DESIGN_SYSTEMS,type DesignSystemId} from '@/lib/design-systems';
 import {DEFAULT_MODELS,LLM_PROVIDERS,MODEL_OPTIONS,type LlmProvider,validModel} from '@/lib/llm';
 import {applyHtmlPatch} from '@/lib/html-patch';
+import {readGeneration} from '@/lib/generation-stream';
 import '@excalidraw/excalidraw/index.css';
 const DRAWING_PAUSE_MS=600;
 const TYPING_PAUSE_MS=1000;
 const SPEECH_PAUSE_MS=350;
 const empty='<!doctype html><html><body style="font-family:system-ui;color:#868593;display:grid;place-items:center;height:90vh;margin:0;background:#fff"><div style="text-align:center"><h2 style="font-size:18px;font-weight:500">Your interface appears here</h2><p style="font-size:14px">Connect an LLM, then draw and describe your idea.</p></div></body></html>';
-async function readGeneration(response:Response,onText:(text:string)=>void){
- const stream=response.body;
- if(!stream)throw Error('The LLM returned an empty response.');
- const reader=stream.getReader(),decoder=new TextDecoder();
- let code='',buffer='',complete=false;
- const handleFrame=(line:string)=>{
-  if(!line.trim())return;
-  const frame=JSON.parse(line) as {type:'text'|'error'|'done';text?:string;message?:string};
-  if(frame.type==='error')throw Error(frame.message||'The LLM stopped generation.');
-  if(frame.type==='done'){complete=true;return}
-  if(frame.type==='text'){code+=frame.text??'';onText(code)}
- };
- while(true){
-  const {done,value}=await reader.read();
-  buffer+=done?decoder.decode():decoder.decode(value,{stream:true});
-  const lines=buffer.split('\n');buffer=lines.pop()??'';
-  for(const line of lines)handleFrame(line);
-  if(done){if(buffer)handleFrame(buffer);break}
- }
- if(!complete)throw Error('The LLM connection ended before generation finished.');
- return code.replace(/^```(?:html|javascript|js)?\s*/,'').replace(/```\s*$/,'');
-}
 function draftPreviewFrom(code:string){
  const source=code.replace(/^```(?:html)?\s*/,'');
  const body=source.search(/<body\b[^>]*>/i);
@@ -57,7 +36,7 @@ export default function Home(){
  const model=modelChoice==='custom'?appliedCustomModel:modelChoice;
  const key=keys[provider],serverKey=serverKeys[provider];
  const connected=serverKey||Boolean(key.trim());
- const api=useRef<any>(null),editorModule=useRef<any>(null),recognition=useRef<any>(null),listeningRef=useRef(false),scene=useRef<any[]>([]),revision=useRef(0),litRevision=useRef(0),timer=useRef<ReturnType<typeof setTimeout>|null>(null),running=useRef(false),queued=useRef(false),needsFull=useRef(true),appliedInstructions=useRef<string|null>(null),htmlRef=useRef(html),dueAt=useRef(0),gestureActive=useRef(false),clearEpoch=useRef(0),controller=useRef<AbortController|null>(null),litController=useRef<AbortController|null>(null),config=useRef({provider,key,serverKey,connected,model,designSystem,live,prompt,transcript}),mounted=useRef(true),run=useRef<(force?:boolean)=>Promise<void>>(async()=>{}),signature=useRef(''),speechFinal=useRef(''),typedPrompt=useRef(false);
+ const api=useRef<any>(null),editorModule=useRef<any>(null),recognition=useRef<any>(null),listeningRef=useRef(false),scene=useRef<any[]>([]),litRevision=useRef(0),timer=useRef<ReturnType<typeof setTimeout>|null>(null),running=useRef(false),queued=useRef(false),needsFull=useRef(true),appliedInstructions=useRef<string|null>(null),htmlRef=useRef(html),dueAt=useRef(0),queuedDelay=useRef(DRAWING_PAUSE_MS),gestureActive=useRef(false),clearEpoch=useRef(0),controller=useRef<AbortController|null>(null),litController=useRef<AbortController|null>(null),config=useRef({provider,key,serverKey,connected,model,designSystem,live,prompt,transcript}),mounted=useRef(true),run=useRef<(force?:boolean)=>Promise<void>>(async()=>{}),signature=useRef(''),speechFinal=useRef(''),typedPrompt=useRef(false);
  config.current={provider,key,serverKey,connected,model,designSystem,live,prompt,transcript};
  htmlRef.current=html;
  useEffect(()=>{const controller=new AbortController();fetch('/api/generate',{signal:controller.signal}).then(response=>response.ok?response.json():null).then(data=>{if(data?.configured)setServerKeys({gemini:Boolean(data.configured.gemini),openai:Boolean(data.configured.openai)})}).catch(()=>{});return()=>controller.abort()},[]);
@@ -66,37 +45,35 @@ export default function Home(){
  function clearTimer(){if(timer.current){clearTimeout(timer.current);timer.current=null}}
 function armTimer(){
   clearTimer();
-  if(!queued.current||gestureActive.current||!config.current.live||!config.current.connected||!validModel(config.current.provider,config.current.model))return;
-  timer.current=setTimeout(()=>{timer.current=null;if(!queued.current||gestureActive.current)return;if(running.current)controller.current?.abort();else void run.current()},Math.max(0,dueAt.current-Date.now()));
+  if(running.current||!queued.current||gestureActive.current||!config.current.live||!config.current.connected||!validModel(config.current.provider,config.current.model))return;
+  timer.current=setTimeout(()=>{timer.current=null;if(running.current||!queued.current||gestureActive.current)return;void run.current()},Math.max(0,dueAt.current-Date.now()));
  }
 function schedule(delay:number,label:string,kind:'full'|'patch'='full'){
-  revision.current++;
-  controller.current?.abort();
   if(kind==='full')needsFull.current=true;
   queued.current=true;
+  queuedDelay.current=delay;
   dueAt.current=Date.now()+delay;
-  setDraftHtml(null);
-  setDraftPreview(null);
+  if(!running.current){setDraftHtml(null);setDraftPreview(null)}
   if(!config.current.live){setStatus('Automatic generation paused');return}
   if(!config.current.connected){setStatus('Connect the selected LLM in LLM settings');return}
   if(!validModel(config.current.provider,config.current.model)){setStatus('Choose a supported model, or apply a valid custom Gemini model ID');return}
   setStatus(running.current?'Generating · latest changes queued':label);
   armTimer();
  }
- function finishGesture(){if(!gestureActive.current)return;gestureActive.current=false;if(queued.current){dueAt.current=Date.now()+DRAWING_PAUSE_MS;if(config.current.live&&config.current.connected&&validModel(config.current.provider,config.current.model))setStatus(running.current?'Generating · latest changes queued':'Drawing finished · generating shortly');armTimer()}}
+ function finishGesture(){if(!gestureActive.current)return;gestureActive.current=false;if(queued.current){queuedDelay.current=DRAWING_PAUSE_MS;dueAt.current=Date.now()+DRAWING_PAUSE_MS;if(config.current.live&&config.current.connected&&validModel(config.current.provider,config.current.model))setStatus(running.current?'Generating · latest changes queued':'Drawing finished · generating shortly');armTimer()}}
  useEffect(()=>{window.addEventListener('pointerup',finishGesture);window.addEventListener('pointercancel',finishGesture);return()=>{window.removeEventListener('pointerup',finishGesture);window.removeEventListener('pointercancel',finishGesture)}},[]);
- run.current=async(force=false)=>{if(running.current||(!force&&(!config.current.live||!queued.current))||!config.current.connected)return;if(!validModel(config.current.provider,config.current.model)){setStatus('Choose a supported model, or apply a valid custom Gemini model ID');return}const epoch=clearEpoch.current,version=revision.current,c={...config.current},elements=scene.current.filter(e=>!e.isDeleted),instructions=c.prompt+'\nSpoken instructions: '+c.transcript,patch=!force&&!needsFull.current&&htmlRef.current!==empty&&appliedInstructions.current!==null;if(!elements.length&&!c.transcript.trim()&&!typedPrompt.current&&!force){queued.current=false;setStatus('Draw, speak, or type instructions to start');return}if(!elements.length&&!c.transcript.trim()&&!c.prompt.trim()){queued.current=false;setStatus('Add a drawing or instructions to start');return}if(patch&&instructions===appliedInstructions.current){queued.current=false;setStatus('Preview is up to date');return}queued.current=false;clearTimer();running.current=true;setBusy(true);setDraftHtml(patch?null:'');setDraftPreview(null);setStatus(patch?'Applying edit…':'Generating interface…');const activeController=new AbortController();controller.current=activeController;const started=performance.now();let imageMs=0,firstTextMs:number|null=null,firstPreviewMs:number|null=null;const baseHtml=htmlRef.current;try{
+ run.current=async(force=false)=>{if(running.current||(!force&&(!config.current.live||!queued.current))||!config.current.connected)return;if(!validModel(config.current.provider,config.current.model)){setStatus('Choose a supported model, or apply a valid custom Gemini model ID');return}const epoch=clearEpoch.current,c={...config.current},elements=scene.current.filter(e=>!e.isDeleted),instructions=c.prompt+'\nSpoken instructions: '+c.transcript,patch=!force&&!needsFull.current&&htmlRef.current!==empty&&appliedInstructions.current!==null;if(!elements.length&&!c.transcript.trim()&&!typedPrompt.current&&!force){queued.current=false;setStatus('Draw, speak, or type instructions to start');return}if(!elements.length&&!c.transcript.trim()&&!c.prompt.trim()){queued.current=false;setStatus('Add a drawing or instructions to start');return}if(patch&&instructions===appliedInstructions.current){queued.current=false;setStatus('Preview is up to date');return}queued.current=false;if(!patch)needsFull.current=false;clearTimer();running.current=true;setBusy(true);setDraftHtml(patch?null:'');setDraftPreview(null);setStatus(patch?'Applying edit…':'Generating interface…');const activeController=new AbortController();controller.current=activeController;const started=performance.now();let imageMs=0,firstTextMs:number|null=null,firstPreviewMs:number|null=null;const baseHtml=htmlRef.current;try{
  let image='';if(!patch&&elements.length){const blob=await editorModule.current.exportToBlob({elements,appState:{...api.current.getAppState(),exportBackground:true,viewBackgroundColor:'#ffffff',exportWithDarkMode:false},files:api.current.getFiles(),mimeType:'image/png',maxWidthOrHeight:1400});image=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob)})}
  imageMs=Math.round(performance.now()-started);
  if(activeController.signal.aborted)throw new DOMException('Generation canceled','AbortError');
  const response=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},signal:activeController.signal,body:JSON.stringify(patch?{provider:c.provider,key:c.serverKey?'':c.key,model:c.model,designSystem:c.designSystem,output:'patch',html:baseHtml,previousInstructions:appliedInstructions.current,instructions}:{provider:c.provider,key:c.serverKey?'':c.key,model:c.model,designSystem:c.designSystem,image,elements,prompt:instructions})});if(!response.ok){const error=await response.json() as {error:string};throw Error(error.error)}
  let lastCodeUpdate=0,lastPreviewUpdate=0,lastPreview='';
- const result=await readGeneration(response,text=>{if(!mounted.current||epoch!==clearEpoch.current||version!==revision.current||activeController.signal.aborted)return;const elapsed=performance.now()-started;if(firstTextMs===null)firstTextMs=Math.round(elapsed);if(patch)return;if(elapsed-lastCodeUpdate>=250){setDraftHtml(text.replace(/^```(?:html)?\s*/,'').replace(/```\s*$/,''));lastCodeUpdate=elapsed}if(firstPreviewMs===null||elapsed-lastPreviewUpdate>=1000){const preview=draftPreviewFrom(text);if(preview&&preview!==lastPreview){setDraftPreview(preview);setStatus('Preview appearing · generating interactions…');if(firstPreviewMs===null)firstPreviewMs=Math.round(elapsed);lastPreviewUpdate=elapsed;lastPreview=preview}}});
- if(mounted.current&&epoch===clearEpoch.current&&version===revision.current&&!activeController.signal.aborted){const code=patch?applyHtmlPatch(baseHtml,result):result;htmlRef.current=code;setHtml(code);appliedInstructions.current=instructions;if(!patch)needsFull.current=false;setDraftHtml(null);setDraftPreview(null);setStatus('Preview updated');console.info('[generation timing]',{mode:patch?'patch':'full',imageMs,firstTextMs,firstPreviewMs,totalMs:Math.round(performance.now()-started)})}
- }catch(e){if(mounted.current&&epoch===clearEpoch.current&&version===revision.current&&!(e instanceof Error&&e.name==='AbortError')){setDraftHtml(null);setStatus(e instanceof Error?e.message:'Could not generate')}}
- finally{running.current=false;if(controller.current===activeController)controller.current=null;if(mounted.current){if(!queued.current){setDraftHtml(null);setDraftPreview(null)}setBusy(false);if(queued.current&&config.current.live&&config.current.connected&&validModel(config.current.provider,config.current.model))armTimer()}}};
+ const result=await readGeneration(response,text=>{if(!mounted.current||epoch!==clearEpoch.current||activeController.signal.aborted)return;const elapsed=performance.now()-started;if(firstTextMs===null)firstTextMs=Math.round(elapsed);if(patch)return;if(elapsed-lastCodeUpdate>=250){setDraftHtml(text.replace(/^```(?:html)?\s*/,'').replace(/```\s*$/,''));lastCodeUpdate=elapsed}if(firstPreviewMs===null||elapsed-lastPreviewUpdate>=1000){const preview=draftPreviewFrom(text);if(preview&&preview!==lastPreview){setDraftPreview(preview);setStatus(queued.current?'Preview appearing · latest changes queued':'Preview appearing · generating interactions…');if(firstPreviewMs===null)firstPreviewMs=Math.round(elapsed);lastPreviewUpdate=elapsed;lastPreview=preview}}},patch?'patch':'code');
+ if(mounted.current&&epoch===clearEpoch.current&&!activeController.signal.aborted){const code=patch?applyHtmlPatch(baseHtml,result):result;htmlRef.current=code;setHtml(code);appliedInstructions.current=instructions;setDraftHtml(null);setDraftPreview(null);setStatus('Preview updated');console.info('[generation timing]',{mode:patch?'patch':'full',imageMs,firstTextMs,firstPreviewMs,totalMs:Math.round(performance.now()-started)})}
+ }catch(e){if(mounted.current&&epoch===clearEpoch.current&&!(e instanceof Error&&e.name==='AbortError')){if(!patch)needsFull.current=true;setDraftHtml(null);setStatus(e instanceof Error?e.message:'Could not generate')}}
+ finally{running.current=false;if(controller.current===activeController)controller.current=null;if(mounted.current){setDraftHtml(null);setDraftPreview(null);setBusy(false);if(queued.current&&config.current.live&&config.current.connected&&validModel(config.current.provider,config.current.model)){dueAt.current=Date.now()+queuedDelay.current;setStatus(gestureActive.current?'Latest changes queued · waiting for drawing to finish':'Latest changes queued · updating shortly');armTimer()}}}};
  function invalidateLit(){litRevision.current++;litController.current?.abort();setLitCode('');setLitDraft('');setLitStatus('Generate a draft AIUX widget from this canvas.')}
- useEffect(()=>{invalidateLit()},[provider,designSystem,model,prompt,transcript]);
+ useEffect(()=>{invalidateLit()},[designSystem,prompt,transcript]);
  async function generateLit(){
   if(litBusy||busy||!validModel(provider,model)||designSystem!=='servicenow_lit')return;
   if(!connected){setSettings(true);return}
@@ -113,12 +90,12 @@ function schedule(delay:number,label:string,kind:'full'|'patch'='full'){
   }catch(e){if(mounted.current&&version===litRevision.current&&!(e instanceof Error&&e.name==='AbortError')){setLitDraft('');setLitStatus(e instanceof Error?e.message:'Could not generate Lit source')}}
   finally{if(mounted.current)setLitBusy(false)}
  }
- const selection=useRef({provider,model,designSystem});
- useEffect(()=>{if(selection.current.provider!==provider||selection.current.model!==model||selection.current.designSystem!==designSystem){selection.current={provider,model,designSystem};schedule(DRAWING_PAUSE_MS,'Settings changed · generating shortly')}},[provider,model,designSystem]);
+ const selectedDesignSystem=useRef(designSystem);
+ useEffect(()=>{if(selectedDesignSystem.current!==designSystem){selectedDesignSystem.current=designSystem;schedule(DRAWING_PAUSE_MS,'Design system changed · generating shortly')}},[designSystem]);
  useEffect(()=>{if(!live){clearTimer();queued.current=false;setStatus(running.current?'Generating interface… · Auto off':'Automatic generation paused')}else if(!connected){clearTimer();setStatus('Connect the selected LLM in LLM settings')}else if(!validModel(provider,model)){clearTimer();setStatus('Choose a supported model, or apply a valid custom Gemini model ID')}else if(queued.current)armTimer();else if(!running.current&&html===empty)setStatus('Draw, speak, or type instructions to start')},[provider,connected,model,live]);
- function change(elements:readonly any[],appState?:{editingElement?:unknown}){scene.current=elements as any[];const next=elements.filter(e=>!e.isDeleted).map(e=>`${e.id}:${e.version}`).join('|');if(next===signature.current)return;signature.current=next;invalidateLit();if(!next&&!config.current.transcript.trim()&&!typedPrompt.current){controller.current?.abort();clearEpoch.current++;revision.current++;queued.current=false;needsFull.current=true;appliedInstructions.current=null;clearTimer();htmlRef.current=empty;setHtml(empty);setDraftHtml(null);setDraftPreview(null);setStatus('Canvas cleared · ready for your next idea');return}schedule(appState?.editingElement?TYPING_PAUSE_MS:DRAWING_PAUSE_MS,gestureActive.current?'Drawing… waiting for gesture to end':'Canvas changed · generating shortly')}
+ function change(elements:readonly any[],appState?:{editingElement?:unknown}){scene.current=elements as any[];const next=elements.filter(e=>!e.isDeleted).map(e=>`${e.id}:${e.version}`).join('|');if(next===signature.current)return;signature.current=next;invalidateLit();if(!next&&!config.current.transcript.trim()&&!typedPrompt.current){controller.current?.abort();clearEpoch.current++;queued.current=false;needsFull.current=true;appliedInstructions.current=null;clearTimer();htmlRef.current=empty;setHtml(empty);setDraftHtml(null);setDraftPreview(null);setStatus('Canvas cleared · ready for your next idea');return}schedule(appState?.editingElement?TYPING_PAUSE_MS:DRAWING_PAUSE_MS,gestureActive.current?'Drawing… waiting for gesture to end':'Canvas changed · generating shortly')}
  function toggleMic(){if(listeningRef.current){listeningRef.current=false;recognition.current?.stop();setListening(false);return}const Speech=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!Speech){setStatus('Voice input is unavailable in this browser. Use Chrome or type instructions.');return}const r=new Speech();r.continuous=true;r.interimResults=true;r.lang='en-US';recognition.current=r;r.onresult=(event:any)=>{let final='',partial='';for(let i=event.resultIndex;i<event.results.length;i++){if(event.results[i].isFinal)final+=event.results[i][0].transcript+' ';else partial+=event.results[i][0].transcript}if(final){speechFinal.current+=(speechFinal.current?' ':'')+final.trim();setTranscript(speechFinal.current);schedule(SPEECH_PAUSE_MS,'Spoken instructions received · updating shortly','patch')}setInterim(partial)};r.onerror=(event:any)=>{listeningRef.current=false;setListening(false);setStatus(event.error==='not-allowed'?'Microphone permission was denied. Allow it in your browser to use voice.':'Voice input stopped: '+event.error)};r.onend=()=>{if(listeningRef.current){try{r.start()}catch{listeningRef.current=false;setListening(false)}}};try{r.start();listeningRef.current=true;setListening(true)}catch{setStatus('Unable to start microphone. Check browser permissions.')}}
- function clear(){controller.current?.abort();clearEpoch.current++;revision.current++;queued.current=false;needsFull.current=true;appliedInstructions.current=null;gestureActive.current=false;clearTimer();listeningRef.current=false;if(recognition.current){recognition.current.onresult=null;recognition.current.onend=null;recognition.current.onerror=null;recognition.current.abort();recognition.current=null}setListening(false);speechFinal.current='';setTranscript('');setInterim('');typedPrompt.current=false;api.current?.resetScene();scene.current=[];signature.current='';queued.current=false;clearTimer();invalidateLit();htmlRef.current=empty;setHtml(empty);setDraftHtml(null);setDraftPreview(null);setConfirmClear(false);setStatus('Canvas and spoken instructions cleared')}
+ function clear(){controller.current?.abort();clearEpoch.current++;queued.current=false;needsFull.current=true;appliedInstructions.current=null;gestureActive.current=false;clearTimer();listeningRef.current=false;if(recognition.current){recognition.current.onresult=null;recognition.current.onend=null;recognition.current.onerror=null;recognition.current.abort();recognition.current=null}setListening(false);speechFinal.current='';setTranscript('');setInterim('');typedPrompt.current=false;api.current?.resetScene();scene.current=[];signature.current='';queued.current=false;clearTimer();invalidateLit();htmlRef.current=empty;setHtml(empty);setDraftHtml(null);setDraftPreview(null);setConfirmClear(false);setStatus('Canvas and spoken instructions cleared')}
  function download(){const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));const a=document.createElement('a');a.href=url;a.download='wireframe-interface.html';a.click();URL.revokeObjectURL(url)}
  function downloadLit(){const url=URL.createObjectURL(new Blob([litCode],{type:'text/javascript'}));const a=document.createElement('a');a.href=url;a.download='aiux-widget.js';a.click();URL.revokeObjectURL(url)}
  function applyCustomModel(){const id=customModel.trim();if(validModel('gemini',id))setAppliedCustomModel(id);else setStatus('Enter a valid Gemini model ID, such as gemini-3.1-flash-lite')}

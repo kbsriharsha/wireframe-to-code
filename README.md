@@ -57,11 +57,11 @@ When **ServiceNow Lit (AIUX)** is selected, the **AIUX Lit** tab offers **Genera
 
 ## How generation works
 
-The first request generates a **complete HTML document** from the sketch and instructions. Later typed and spoken instruction edits ask the selected model for small replacements in the current HTML, so the preview updates without rewriting the whole page. These patch requests skip drawing image export and keep the existing preview visible until the edit succeeds. If the edit cannot identify one exact target, the current HTML stays intact; rephrase the instruction or click **Generate** for a full rebuild. Sketch and model or design system changes also rebuild the full page.
+The first request generates a **complete HTML document** from the sketch and instructions. Later typed and spoken instruction edits ask the selected model for small replacements in the current HTML, so the preview updates without rewriting the whole page. These patch requests skip drawing image export and keep the existing preview visible until the edit succeeds. If the edit cannot identify one exact target, the current HTML stays intact; rephrase the instruction or click **Generate** for a full rebuild. Gemini patch requests use a JSON response schema; fenced JSON is accepted by the shared patch parser. Sketch and design system changes also rebuild the full page. Changing provider or model preserves the current output and applies to the next request.
 
-During a full rebuild, HTML streams into the **HTML** tab and **Preview** shows a visual draft as soon as usable page markup arrives. Auto waits until a drawing gesture ends, then about 600 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. New edits cancel an active request and start a new one after the pause. Turn Auto off to control API usage.
+During a full rebuild, HTML streams into the **HTML** tab and **Preview** shows a visual draft as soon as usable page markup arrives. Auto waits until a drawing gesture ends, then about 600 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. Edits made during a request are collected into one pending update. The active request finishes and displays its result, then the pause timer restarts before generating from the latest sketch and instructions. Clearing the canvas still cancels immediately. Turn Auto off to control API usage.
 
-The design system choice guides the generated appearance. The standalone HTML preview does not install native ServiceNow, Material UI, shadcn/ui, or Apple components. The Lit draft is source code, not a UI Builder page or a deployed ServiceNow component.
+The sketch determines the screen type, controls, and layout; the design system choice guides their generated appearance. Handwritten field labels are interpreted as working form controls. Workspace navigation, tables, and branding are included only when drawn or explicitly requested. The standalone HTML preview does not install native ServiceNow, Material UI, shadcn/ui, or Apple components. The Lit draft is source code, not a UI Builder page or a deployed ServiceNow component.
 
 The local server uses `GEMINI_API_KEY` or `OPENAI_API_KEY` from `.env.local` for the selected provider when present. The server sends that provider's key only to its API. A key entered in **LLM settings** stays in the browser tab's memory and is sent to the local server for generation; it is lost on refresh. The app does not persist drawings, transcripts, or generated code. Export work you want to keep before refreshing or closing the tab. Browser speech recognition may use an online transcription service provided by your browser.
 
@@ -75,7 +75,7 @@ The local server uses `GEMINI_API_KEY` or `OPENAI_API_KEY` from `.env.local` for
 | `pnpm build` | Build the production app. |
 | `pnpm start` | Serve the production build at `127.0.0.1:3000`. |
 
-For production mode on your computer, run `pnpm build` followed by `pnpm start`.
+For production mode on your computer, run `pnpm build` followed by `pnpm start`. After changing source code, stop the server, rebuild, and restart it; `pnpm start` serves the compiled build. Use `pnpm dev` to pick up source edits automatically during development.
 
 ## Troubleshooting
 
@@ -93,6 +93,7 @@ For production mode on your computer, run `pnpm build` followed by `pnpm start`.
 - `app/page.tsx`: canvas, controls, generation scheduling, preview, code editor, and export.
 - `app/api/generate/route.ts`: Gemini and OpenAI request validation and streaming proxy.
 - `lib/llm.ts`: provider model options and validation.
+- `lib/generation-stream.ts`: NDJSON response reader with separate patch and code handling.
 - `lib/design-systems.ts`: design system options and generation guidance.
 - `app/globals.css`: studio styling.
 - `public/excalidraw/fonts/`: locally bundled drawing fonts.
