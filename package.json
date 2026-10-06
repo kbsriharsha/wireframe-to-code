@@ -10,7 +10,7 @@
     "build": "next build --webpack",
     "start": "next start --hostname 127.0.0.1 --port 3000",
     "typecheck": "tsc --noEmit",
-    "test:patch": "tsx --test tests/html-patch.test.ts"
+    "test:patch": "tsx --test tests/*.test.*"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
