@@ -8,6 +8,7 @@ out/
 dist/
 build/
 coverage/
+.playwright-mcp/
 .cache/
 .turbo/
 .vercel/
@@ -21,6 +22,10 @@ coverage/
 
 # pnpm is the package manager for this project
 /package-lock.json
+
+# Local session handoff notes
+/dailyprogress.md
+/features.md
 
 # Local logs and operating system files
 *.log
