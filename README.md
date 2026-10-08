@@ -128,3 +128,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and verification steps.
 ## Credits
 
 Built with [Next.js](https://nextjs.org/), [React](https://react.dev/), and [Excalidraw](https://github.com/excalidraw/excalidraw). UI primitives use Radix UI and shadcn-style components. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled asset copyrights and licenses.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE). Bundled third-party assets retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
