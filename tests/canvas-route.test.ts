@@ -23,6 +23,7 @@ test('both providers receive canvas context and image; instruction patches omit 
    const parts=provider==='gemini'?sent.contents[0].parts:sent.input[0].content;
    assert.equal(parts.length,canvas?2:1);
    assert.match(parts[0].text,/Canvas changes/);
+   assert.match(parts[0].text,/Selected visual style: ServiceNow Horizon/);
    if(canvas)assert.match(parts[0].text,/"backgroundColor":"red"/);
    const patched=applyHtmlPatch(html,await readGeneration(response,()=>{},'patch'));
    assert.equal(patched,html.replace('color:blue','color:red'));

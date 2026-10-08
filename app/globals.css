@@ -109,3 +109,25 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#24232b;background:#f
 .lit-status{margin:0;color:#b5b0c4;font-size:12px;line-height:1.4}
 @media(max-width:1100px){.app-header{flex-wrap:wrap;height:auto;min-height:58px;padding-top:9px;padding-bottom:9px}.header-spacer{min-width:10px}}
 @media(max-width:700px){.design-control,.model-control,.provider-control,.custom-model-control{width:100%}.design-control select,.model-control select,.provider-control select{max-width:none;flex:1}.custom-model-control input{flex:1;width:auto}}
+
+/* Workspace divider: pointer and keyboard resizing without changing the scene. */
+.studio-body{grid-template-columns:minmax(0,var(--canvas-share,55fr)) 10px minmax(0,var(--preview-share,45fr))}
+.canvas-panel,.output-panel{min-width:0}
+.workspace-divider{display:flex;align-items:center;justify-content:center;background:#f6f5fa;border-inline:1px solid #e6e4ed;cursor:col-resize;touch-action:none;user-select:none}
+.workspace-divider span{width:3px;height:36px;border-radius:3px;background:#bbb5cf}
+.workspace-divider:hover,.workspace-divider:focus-visible{background:#eeecff;outline:2px solid #6965db;outline-offset:-2px}
+.workspace-divider:hover span,.workspace-divider:focus-visible span{background:#6965db}
+.studio-body[data-resizing=true]{cursor:col-resize;user-select:none}
+.studio-body[data-resizing=true] iframe{pointer-events:none}
+@media(max-width:700px){.studio-body{grid-template-columns:1fr}.workspace-divider{display:none}}
+
+/* Keep generation feedback next to the output controls for screen recordings. */
+.generation-status{border-top:0;border-bottom:1px solid #e8e6ef;flex-shrink:0}
+.generation-status[data-busy=true]{background:#eeecff;color:#5753a8;font-weight:500}
+
+.speech-card{flex-shrink:0;background:#f5f3ff;padding:14px 16px;border-bottom:1px solid #e3ddf8;min-width:0}
+.speech-card-label{font-size:11px;font-weight:600;color:#756a9b;letter-spacing:.03em}
+.speech-card p{font-size:17px;line-height:1.4;color:#30294c;margin:6px 0 0;max-height:110px;overflow:auto;overflow-wrap:anywhere}
+.speech-card[data-speaking=true] p{font-size:26px;max-height:150px}
+.speech-partial{color:#7b719a}
+@media(max-width:700px){.speech-card[data-speaking=true] p{font-size:21px}.speech-card{padding:12px}}

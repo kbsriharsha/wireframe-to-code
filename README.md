@@ -1,104 +1,130 @@
 # Wireframe Studio
 
-Turn an Excalidraw sketch into a working HTML prototype with Gemini or OpenAI. Draw a layout, add typed or spoken instructions, choose a visual style, and watch the generated code stream into the studio.
+Draw an interface, describe a change, and preview a working HTML prototype with Gemini or OpenAI.
 
-## What you can do
+Wireframe Studio combines an Excalidraw canvas, browser speech recognition, streamed HTML generation, and targeted edits in a local Next.js app. The sketch supplies the layout; your instructions refine it; the selected design system guides its appearance.
 
-- Sketch a screen with Excalidraw and generate a standalone HTML preview.
-- Choose ServiceNow Horizon, ServiceNow Lit (AIUX), Material Design 3, shadcn/ui, Apple Human Interface, or Modern neutral as the visual style.
-- Choose Gemini or OpenAI, then select a model for that provider. Gemini also accepts a custom model ID.
-- Use **Auto** for generation after edits, or click **Generate** when ready.
-- Inspect or edit the HTML, switch between desktop and mobile preview widths, and export the HTML file.
-- With ServiceNow Lit (AIUX) selected, generate and export a separate draft Lit widget source file.
+## Features
 
-## Requirements
+- **Draw and generate:** turn a wireframe into standalone HTML with embedded CSS and JavaScript.
+- **Edit incrementally:** automatic canvas, typed, and spoken changes patch the current page after its first generation.
+- **Speak visibly:** a large live transcript above the preview condenses to the latest instruction, with queued, applying, success, and error feedback. Full spoken history remains editable below the canvas.
+- **Choose your LLM:** Gemini or OpenAI, provider-specific model options, and custom Gemini model IDs.
+- **Choose a visual style:** ServiceNow Horizon, ServiceNow Lit (AIUX), Material Design 3, shadcn/ui, Apple Human Interface, or Modern neutral.
+- **Inspect and export:** edit the generated HTML, switch preview widths, resize the canvas/preview panels, and download the prototype.
+- **Optional Lit draft:** generate and export separate AIUX-style Lit source when ServiceNow Lit is selected.
 
-- Node.js 22.13.0 or newer.
-- A [Google AI Studio API key](https://aistudio.google.com/apikey) or an [OpenAI API key](https://platform.openai.com/api-keys) with access to your chosen model.
-- Internet access for installation and model requests. Voice input also needs a browser that supports speech recognition and microphone permission.
+## Quick start
 
-## Run locally
+Requires **Node.js 22.13.0+**, **pnpm 11.25.0**, and an API key with access to your selected provider and model. Internet access is needed for installation and generation.
 
-1. Clone or download this repository and open a terminal in the folder containing `package.json`.
-2. Install the pinned pnpm version and dependencies:
+```sh
+git clone https://github.com/kbsriharsha/wireframe-to-code.git
+cd wireframe-to-code
+npm install -g pnpm@11.25.0
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+```
 
-   ```sh
-   npm install -g pnpm@11.25.0
-   pnpm install --frozen-lockfile
-   ```
+Add either or both keys to `.env.local`:
 
-3. Create `.env.local` in the project root with the key for either or both providers:
+```dotenv
+GEMINI_API_KEY=your_google_ai_studio_key
+OPENAI_API_KEY=your_openai_api_key
+```
 
-   ```dotenv
-   GEMINI_API_KEY=your_google_ai_studio_key
-   OPENAI_API_KEY=your_openai_api_key
-   ```
+Get a key from [Google AI Studio](https://aistudio.google.com/apikey) or [OpenAI](https://platform.openai.com/api-keys). Model availability and quotas depend on your provider account; dropdown options do not guarantee access.
 
-4. Start the app:
+```sh
+pnpm dev
+```
 
-   ```sh
-   pnpm dev
-   ```
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Restart the server after changing `.env.local`. You can also enter a key in **LLM settings**; server environment keys take precedence over keys entered in the browser.
 
-5. Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+The repository uses pnpm and its committed lockfile. npm is used above only to install pnpm.
 
-Restart the server after changing `.env.local`. You can also enter a key through **LLM settings** in the app. `.env.local` is ignored by Git; keep your real keys out of commits, screenshots, and issue reports.
+## Your first prototype
 
-## Generate an interface
+1. Select a **Provider**, **Model**, and **Design system**.
+2. For a controlled first sketch, turn **Auto** off, draw your screen, and add typed instructions below the canvas.
+3. Click **Generate** and review the result in **Preview** or **HTML**.
+4. Turn **Auto** on, then draw or describe small changes.
+5. Use **Export** to download the current HTML.
 
-1. Select a **Provider**, **Model**, and **Design system** in the header.
-2. Draw on the canvas and edit the interface instructions below it. **Speak instructions** adds finalized speech recognition results to a separate, editable transcript.
-3. Leave **Auto** on to generate after you pause, or turn it off and use **Generate** for an immediate request.
-4. View the result in **Preview** or inspect and edit it in **HTML**. **Export** downloads the current HTML prototype.
+**Speak instructions** uses browser speech recognition and requires microphone permission and a supported browser. The latest utterance appears above the preview while speaking. Finalized segments condense after a 350 ms pause; display cleanup only normalizes whitespace and makes no additional model request. The microphone stays listening for the next instruction. With Auto off, speech is retained and shows **Ready · Auto off** until you generate manually.
 
-**Clear canvas** removes the drawing, preview, and spoken instructions, and stops the microphone. Typed interface instructions remain so you can reuse them for a new sketch.
+Drag the divider to resize canvas and preview, use arrow keys while it is focused, or double-click to reset. Narrow screens stack the panels. **Desktop/Mobile** changes the preview width; it does not generate another page.
 
-When **ServiceNow Lit (AIUX)** is selected, the **AIUX Lit** tab offers **Generate Lit source** and **Export Lit**. This is a separate, on-demand draft for an Employee Slate widget. Review and validate it in your ServiceNow environment before use.
+**Clear canvas** cancels active and queued work, clears the drawing, preview, and speech history, and stops the microphone. Typed instructions remain.
 
-## How generation works
+## Generation behavior
 
-The first request generates a **complete HTML document** from the sketch and instructions. Later automatic canvas, typed, and spoken edits ask the selected model for small replacements in the current HTML. Canvas patches include an updated sketch image and added, removed, or changed elements compared with the last successful generation. Instruction-only patches skip image export. The current preview remains visible while patching; invalid or ambiguous edits keep both the HTML and successful sketch baseline intact. Rephrase the edit or click **Generate** for a full rebuild. Gemini patches use a JSON response schema and the shared parser accepts fenced JSON.
+| Action | Result |
+| --- | --- |
+| First generation or **Generate** | Build a complete HTML document. |
+| Automatic canvas edit | Patch the current HTML using an updated sketch image and element changes since the last successful result. |
+| Automatic typed or spoken edit | Patch the current HTML without exporting another sketch image, unless canvas changes are also pending. |
+| Change design system | Queue a full rebuild, even with Auto off, after active generation finishes. |
+| Change provider/model | Preserve the output; apply the selection to the next request. |
+| Invalid or ambiguous patch | Keep the existing HTML and successful sketch baseline; show an error. |
 
-Changing the design system or clicking **Generate** rebuilds the full page. Changing provider or model preserves the current output and applies to the next request. For a controlled first sketch, turn Auto off, draw, click Generate, then turn Auto on for automatic patches.
+Auto waits until a drawing gesture finishes, then about **500 ms**. Typed instructions wait **1 second**. Speech waits for finalized recognition and its **350 ms** pause. New edits during generation are collected into one pending update; the active request finishes before a fresh pause starts for the follow-up. Partial speech and active drawing gestures defer automatic work.
 
-During a full rebuild, HTML streams into the **HTML** tab and **Preview** shows a visual draft as soon as usable page markup arrives. Auto waits until a drawing gesture ends, then about 500 ms; typed instructions wait about one second, and finalized speech uses a shorter pause. Edits made during a request are collected into one pending update. The active request finishes and displays its result, then the pause timer restarts before generating from the latest sketch and instructions. The status distinguishes “Building your interface…” from “Updating your edit…”. When more edits arrive during generation, it shows “Changes queued · finishing current generation”. Clearing the canvas still cancels immediately. Turn Auto off to control API usage.
+Full generation streams a draft into the preview with scripts disabled; the completed document enables local interactions. Patches keep the existing preview visible until validated replacements succeed. Status appears below the Preview/HTML tabs: **Building your interface…**, **Updating your edit…**, or queued feedback. Speech-related requests show **Applying change…** and **Updated**.
 
-The sketch determines the screen type, controls, and layout; the design system choice guides their generated appearance. Handwritten field labels are interpreted as working form controls. Workspace navigation, tables, and branding are included only when drawn or explicitly requested. The standalone HTML preview does not install native ServiceNow, Material UI, shadcn/ui, or Apple components. The Lit draft is source code, not a UI Builder page or a deployed ServiceNow component.
+If an edit is too broad for a targeted patch, refine it or click **Generate** for a complete rebuild. Switching models does not retry a failed request by itself.
 
-The local server uses `GEMINI_API_KEY` or `OPENAI_API_KEY` from `.env.local` for the selected provider when present. The server sends that provider's key only to its API. A key entered in **LLM settings** stays in the browser tab's memory and is sent to the local server for generation; it is lost on refresh. The app does not persist drawings, transcripts, or generated code. Export work you want to keep before refreshing or closing the tab. Browser speech recognition may use an online transcription service provided by your browser.
+## Limitations
 
-## Commands
+- Generated output is an **AI-produced prototype**, requiring review before use. Sketch fidelity, design consistency, responsiveness, and accessibility can vary.
+- Visual styles are **inspired by** the selected design system. Standalone HTML does not install native ServiceNow, Material UI, shadcn/ui, or Apple components, and no design-system conformance is certified.
+- AIUX Lit output is a separate on-demand draft, not a deployed widget or UI Builder page. Validate imports and behavior in your ServiceNow environment.
+- No application database, authentication flow, ServiceNow connection, or production backend is generated by this studio.
+- Drawings, transcripts, keys entered in the browser, and generated output are not saved by the studio across reloads. Export work you want to retain. Excalidraw's own save/load tools can save drawings separately.
+
+## Data and API usage
+
+This is a **local development tool**. The included server binds to `127.0.0.1`; its generation endpoint has no user authentication or rate limiting. Do not expose it as a public service with a shared server key without adding those controls.
+
+Generation sends instructions and, when needed, sketch images and element data to the selected provider. Patches also send the current HTML. Provider usage may incur charges and is subject to that provider's data handling policies. Browser speech recognition may send audio to your browser's transcription service.
+
+Server keys remain on the server; `/api/generate` reports only whether each provider is configured. Browser-entered keys stay in tab memory and are sent to the local server for requests. Keep real keys out of Git, recordings, and issue reports. `.env.local` is ignored; `.env.example` contains placeholders only.
+
+## Development and verification
 
 | Command | Purpose |
 | --- | --- |
 | `pnpm dev` | Run the development server at `127.0.0.1:3000`. |
 | `pnpm typecheck` | Check TypeScript types. |
-| `pnpm test:patch` | Run 15 regression tests for canvas deltas, provider requests, queued generation, targeted HTML edits, and safe failure behavior. |
-| `pnpm build` | Build the production app. |
-| `pnpm start` | Serve the production build at `127.0.0.1:3000`. |
+| `pnpm test:patch` | Test scene deltas, provider request contracts, queued generation, patch safety, and speech presentation without calling live models. |
+| `pnpm build` | Create the production build. |
+| `pnpm start` | Serve the existing production build at `127.0.0.1:3000`. |
 
-For production mode on your computer, run `pnpm build` followed by `pnpm start`. After changing source code, stop the server, rebuild, and restart it; `pnpm start` serves the compiled build. Use `pnpm dev` to pick up source edits automatically during development.
+For production mode, run `pnpm build` then `pnpm start`. After source edits, **stop the production server, rebuild, then restart it**. Building while an old server runs can leave it requesting obsolete JavaScript/CSS assets. Use `pnpm dev` for source changes during development.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and verification steps.
 
 ## Troubleshooting
 
 | Symptom | What to check |
 | --- | --- |
-| Missing key or connection error | Set the selected provider's key in `.env.local` and restart the server, or enter it in **LLM settings**. |
-| Model error | Choose a model available to your provider account. Gemini also supports a custom model ID. |
-| Rate limit | Turn **Auto** off, wait for quota to recover, or choose a model with available quota. |
-| Blank or older preview during generation | The draft appears after usable page markup arrives. Check the status message if generation fails. |
-| Microphone unavailable | Allow microphone access and use a browser with speech recognition. Typed instructions still work. |
-| Port 3000 in use | Stop the other server, or run `pnpm exec next dev --webpack --hostname 127.0.0.1 --port 3001`. |
+| Missing key or connection error | Configure the selected provider and restart, or enter a key in LLM settings. |
+| Model error | Select a model accessible to your account; Gemini allows custom IDs. |
+| Rate limit | Turn Auto off and retry after your provider quota recovers. |
+| Patch rejected | Keep the current preview, refine the edit, or use Generate. |
+| Old UI, disabled controls, or missing assets | Stop the production server, rebuild, restart, then reload. |
+| Microphone unavailable | Check browser speech-recognition support and microphone permission; typed instructions work independently. |
+| Port 3000 in use | Use `pnpm exec next dev --webpack --hostname 127.0.0.1 --port 3001` for another development port. |
 
-## Project files
+## Project structure
 
-- `app/page.tsx`: canvas, controls, generation scheduling, preview, code editor, and export.
-- `app/api/generate/route.ts`: Gemini and OpenAI request validation and streaming proxy.
-- `lib/llm.ts`: provider model options and validation.
-- `lib/canvas-changes.ts`: immutable visual scene snapshots, element deltas, and request validation.
-- `lib/generation-stream.ts`: NDJSON response reader with separate patch and code handling.
-- `lib/design-systems.ts`: design system options and generation guidance.
-- `app/globals.css`: studio styling.
-- `public/excalidraw/fonts/`: locally bundled drawing fonts.
+- `app/page.tsx`: studio controls, speech recognition, scheduling, preview, and export.
+- `app/api/generate/route.ts`: provider request validation and streaming proxy.
+- `lib/`: model options, visual guidance, scene comparison, stream parsing, patch validation, and speech presentation.
+- `components/`: studio components and UI primitives.
+- `tests/`: regression tests with mocked provider responses.
+- `public/excalidraw/fonts/`: bundled drawing fonts.
 
-This project produces standalone interface prototypes. It does not connect to a ServiceNow instance or import pages into UI Builder.
+## Credits
+
+Built with [Next.js](https://nextjs.org/), [React](https://react.dev/), and [Excalidraw](https://github.com/excalidraw/excalidraw). UI primitives use Radix UI and shadcn-style components. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for bundled asset copyrights and licenses.
